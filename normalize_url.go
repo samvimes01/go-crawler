@@ -2,18 +2,21 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"strings"
 	"net/url"
+	"strings"
 )
 
-func normalizeURL(rawUrl string) (string, error) {
-	trimmed := strings.TrimRight(rawUrl, "/")
-	u, err := url.Parse(trimmed)
+func normalizeURL(rawURL string) (string, error) {
+	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		log.Print(err)
-		return "", err
+		return "", fmt.Errorf("couldn't parse URL: %w", err)
 	}
 
-	return fmt.Sprintf("%s%s", u.Host, u.Path), nil
+	fullPath := parsedURL.Host + parsedURL.Path
+
+	fullPath = strings.ToLower(fullPath)
+
+	fullPath = strings.TrimSuffix(fullPath, "/")
+
+	return fullPath, nil
 }
