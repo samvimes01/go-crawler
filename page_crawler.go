@@ -3,31 +3,28 @@ package main
 import (
 	"fmt"
 	"net/url"
-	"sync"
 )
 
-type config struct {
-	pages              map[string]PageData
-	baseURL            *url.URL
-	mu                 *sync.Mutex
-	concurrencyControl chan struct{}
-	wg                 *sync.WaitGroup
-}
+func (cfg *config) crawlPage(rawCurrentURL string) {
+	cfg.concurrencyControl <- struct{}{}
+	defer func() {
+		<-cfg.concurrencyControl
+		cfg.wg.Done()
+	}()
 
-func crawlPage(rawBaseURL, rawCurrentURL string, pages map[string]int) {
-	baseURL, err := url.Parse(rawBaseURL)
-	if err != nil {
-		fmt.Printf("skipping broken base URL %s\n", rawBaseURL)
+	if cfg.maxPagesReached() {
 		return
 	}
+
+	baseURL := cfg.baseURL
 	currentURL, err := url.Parse(rawCurrentURL)
 	if err != nil {
 		fmt.Printf("skipping broken current URL %s\n", rawCurrentURL)
+
 		return
 	}
 
 	if baseURL.Hostname() != currentURL.Hostname() {
-		fmt.Printf("skipping external URL %s\n", rawCurrentURL)
 		return
 	}
 
@@ -37,13 +34,12 @@ func crawlPage(rawBaseURL, rawCurrentURL string, pages map[string]int) {
 		return
 	}
 
-	if _, visited := pages[normalizedURL]; visited {
-		fmt.Printf("skipping duplicate URL %s\n", rawCurrentURL)
-		pages[normalizedURL]++
+	isFirst := cfg.addPageVisit(normalizedURL)
+	if !isFirst {
 		return
 	}
 
-	pages[normalizedURL] = 1
+	fmt.Printf("Recursively crawling %s\n", normalizedURL)
 
 	html, err := getHTML(rawCurrentURL)
 	if err != nil {
@@ -51,16 +47,11 @@ func crawlPage(rawBaseURL, rawCurrentURL string, pages map[string]int) {
 		return
 	}
 
-	fmt.Printf("Recursively crawling %s\n", normalizedURL)
+	pageData := extractPageData(html, rawCurrentURL)
+	cfg.setPageData(normalizedURL, pageData)
 
-	urls, err := getURLsFromHTML(html, currentURL)
-	if err != nil {
-		fmt.Printf("error getURLsFromHTML %s: %s\n", normalizedURL, err)
-		return
-	}
-	fmt.Printf("Found %d URLs on %s\n", len(urls), normalizedURL)
-
-	for _, url := range urls {
-		crawlPage(rawBaseURL, url, pages)
+	for _, url := range pageData.OutgoingLinks {
+		cfg.wg.Add(1)
+		go cfg.crawlPage(url)
 	}
 }
