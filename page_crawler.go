@@ -39,8 +39,6 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
 		return
 	}
 
-	fmt.Printf("Recursively crawling %s\n", normalizedURL)
-
 	html, err := getHTML(rawCurrentURL)
 	if err != nil {
 		fmt.Printf("error getHTML %s: %s\n", rawCurrentURL, err)
